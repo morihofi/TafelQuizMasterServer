@@ -1,0 +1,443 @@
+<html>
+<head>
+<title>TafelQuiz</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet"
+	href="http://data.morihofi.de/frameworks/jquery/jquerymobile/jquery.mobile-1.4.5.min.css">
+
+
+<script type="text/javascript"
+	src="http://data.morihofi.de/frameworks/jquery/jquery/jquery-1.11.1.min.js"></script>
+<script type="text/javascript"
+	src="http://data.morihofi.de/frameworks/jquery/jquerymobile/jquery.mobile-1.4.5.min.js"></script>
+
+
+<style>
+* {
+    text-shadow: none !important;
+}
+
+#questionarea {
+	display: none;
+}
+
+#msgquizend {
+	display: none;
+	text-align: center;
+}
+
+#msgnosessionerr {
+	display: none;
+	text-align: center;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	width: 100%;
+	background-color: #4fd124; 
+	color: #FFFFFF;
+}
+
+#msganswertrue {
+	display: none;
+	text-align: center;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	width: 100%;
+	background-color: #de3412;
+	color: #FFFFFF;
+}
+
+#msganswerfalse {
+	display: none;
+	text-align: center;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	width: 100%;
+	background-color: #4fd124; 
+	color: #FFFFFF;
+}
+</style>
+
+<script>
+		
+		
+		var session = null;
+		let ws;
+		var quiz_user = null;
+		var wshost = "ws://" + location.host + "/quizws";
+		var correctanswer = null;
+		var quiz_points = 0;
+	
+		var previousquestions = [];
+		var currentquestion = null;
+		
+		function parse_query_string(query) {
+			  var vars = query.split("&");
+			  var query_string = {};
+			  for (var i = 0; i < vars.length; i++) {
+			    var pair = vars[i].split("=");
+			    var key = decodeURIComponent(pair[0]);
+			    var value = decodeURIComponent(pair[1]);
+			    // If first entry with this name
+			    if (typeof query_string[key] === "undefined") {
+			      query_string[key] = decodeURIComponent(value);
+			      // If second entry with this name
+			    } else if (typeof query_string[key] === "string") {
+			      var arr = [query_string[key], decodeURIComponent(value)];
+			      query_string[key] = arr;
+			      // If third or later entry with this name
+			    } else {
+			      query_string[key].push(decodeURIComponent(value));
+			    }
+			  }
+			  return query_string;
+			}
+
+		
+		
+		
+		function startup(){
+			
+			var query_string = window.location.search;
+			var parsed_qs = parse_query_string(query_string.substring(1));
+			
+			
+			if(parsed_qs.sid == null){
+				$("#msgnosessionerr").show();
+			}else{
+				session = parsed_qs.sid;
+				
+				
+				
+				$.mobile.loading("show", {
+					  text: "Verbindung wird hergestellt...",
+					  textVisible: true,
+					  theme: "z",
+					  html: ""
+				});
+				
+				entername();
+				
+				
+				
+			}
+			
+			
+			
+			
+			
+			
+			
+			
+			
+		}
+		
+		function entername() {
+		   quiz_user = prompt("Bitte geben Sie Ihren Namen ein: ", "");
+
+
+		    if (quiz_user == "" || quiz_user == null) {
+		    	entername();
+		    } else {
+		    	joinsession();
+		    }
+		}
+		
+		
+		function joinsession(){
+			
+			if (ws) {
+		        ws.onerror = ws.onopen = ws.onclose = null;
+		        ws.close();
+		    }
+
+		    ws = new WebSocket(wshost);
+		    ws.onopen = () => {
+		        console.log('[Websocket] Connection opened!');
+				$("#lbconnstatus").html("Verbindungsstatus: Verbindung hergestellt");
+				
+				$.mobile.loading("hide");
+				$.mobile.loading("show", {
+					  text: "Es wird gewartet, dass der Spielleiter das Quiz startet...",
+					  textVisible: true,
+					  theme: "z",
+					  html: ""
+				});
+		    };
+
+		    ws.onmessage = ({
+		        data
+		    }) => wsOnMessage(data);
+			
+		    ws.onclose = function() {
+		        ws = null;
+		        $("#lbconnstatus").html("Verbindungsstatus: Nicht verbunden");
+		        $("#questionarea").hide();
+		        alert("Ein Verbindungsproblem ist aufgetreten: Verbindung geschlossen");
+		    };
+
+		    ws.onerror = function() {
+		    	$("#lbconnstatus").html("Verbindungsstatus: Nicht verbunden");
+		    	$("#questionarea").hide();
+		    	alert("Ein Verbindungsproblem ist aufgetreten: Verbindung abgebrochen");
+		    };
+		    
+			
+		}
+		
+		function wsOnMessage(data){
+			
+			var dataobj = JSON.parse(data);
+			
+			if(dataobj.session == session){
+				if(dataobj.msgtype == "quizstart"){
+					
+					$.mobile.loading("hide");
+					$.mobile.loading("show", {
+						  text: "Einen Moment bitte...",
+						  textVisible: true,
+						  theme: "z",
+						  html: ""
+					});
+					
+					
+				}
+				
+				if(dataobj.msgtype == "quizend"){
+					$("#questionarea").hide();
+					
+					$.mobile.loading("hide");
+					$.mobile.loading("show", {
+						  text: "Ergebnis wird übermittelt...",
+						  textVisible: true,
+						  theme: "z",
+						  html: ""
+					});
+					
+					var obj = {
+							"msgtype":"quizsummary",
+							"session": session,
+							"user": quiz_user,
+							"points": quiz_points
+					};
+					
+					var objasjson = JSON.stringify(obj);
+					ws.send(objasjson);
+					
+					$.mobile.loading("hide");
+					
+					$("#msganswerfalse").hide();
+					$("#msganswertrue").hide();
+					
+					$("#msgquizend").hide();
+					
+					$("#msgquizend").show();
+					$("#msgquizendsummary").html("Sie haben " + quiz_points + " von " + dataobj.allquestions + " Fragen richtig beantwortet!");
+					
+					
+					$.mobile.loading("show", {
+						  text: "Persönliche Statistiken werden erstellt...",
+						  textVisible: true,
+						  theme: "z",
+						  html: ""
+					});
+					
+					for (const question of previousquestions) {
+						
+						  
+						  $("#quizsummarystats").html(
+						  		$("#quizsummarystats").html()
+						  		+ "<h4>" + question.question + "</h4>"
+						  		+ "A) " + question.answer_a + "<br>"
+						  		+ "B) " + question.answer_b + "<br>"
+						  		+ "C) " + question.answer_c + "<br>"
+						  		+ "D) " + question.answer_d + "<br>"
+						  		+ "<br>"
+						  		+ "Ihre Antwort war <b>" + question.pickedanswer.toUpperCase() + "</b>.<br>"
+						  		+ "Antwort <b>" + question.correctanswer.toUpperCase() + "</b> wäre richtig.<br>"
+						  		+ "<hr>"
+						  );
+						  
+						  
+						  
+					}
+					
+					$.mobile.loading("hide");
+					
+					
+					alert("Vielen Dank für Ihre Teilnahme!");
+					
+				}
+				
+				if(dataobj.msgtype == "question"){
+					
+					$("#msganswerfalse").hide();
+					$("#msganswertrue").hide();
+					
+					$("#question").html(dataobj.question);
+					$("#answer_a").html(dataobj.answer_a);
+					$("#answer_b").html(dataobj.answer_b);
+					$("#answer_c").html(dataobj.answer_c);
+					$("#answer_d").html(dataobj.answer_d);
+				
+					correctanswer = dataobj.correctanswer;
+					
+					currentquestion = dataobj;
+					
+					
+					$.mobile.loading("hide");
+					$("#questionarea").show();
+					
+				}
+			
+			}
+		}
+		
+		function answerselect(answer){
+			
+						
+			if(answer == correctanswer){
+				$("#msganswerfalse").show();
+				$("#msganswertrue").hide();
+				
+				
+				quiz_points = quiz_points + 1;	
+			}else{
+				$("#msganswerfalse").hide();
+				$("#msganswertrue").show();
+			}
+			
+			var obj = {
+					"msgtype":"voted",
+					"session": session,
+					"user": quiz_user
+			};
+			
+			
+			
+			var pqobj = {
+				"question": currentquestion.question,
+				"answer_a": currentquestion.answer_a,
+				"answer_b": currentquestion.answer_b,
+				"answer_c": currentquestion.answer_c,
+				"answer_d": currentquestion.answer_d,
+				"correctanswer": correctanswer,
+				"pickedanswer": answer
+			};
+			previousquestions.push(pqobj);
+			
+			
+			
+			
+			
+			var objasjson = JSON.stringify(obj);
+			ws.send(objasjson);
+			
+			$("#questionarea").hide();
+			
+			
+				
+			
+			$.mobile.loading("show", {
+				  text: "Warte auf nächste Frage...",
+				  textVisible: true,
+				  theme: "z",
+				  html: ""
+			});
+				
+				
+			
+			
+			
+			
+		}
+		
+		
+		</script>
+
+</head>
+<body onload="startup()">
+
+<div data-role="page">
+
+<div data-role="header">
+
+    <div style="height: 32px; width: 100%; padding: 5px;">
+
+		<svg width="100%" height="100%" viewBox="0 0 511 110" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;">
+		    <g transform="matrix(9.80081,0,0,9.80081,-628.024,-1208.53)">
+		        <path d="M67.466,132.491L66.862,132.491L66.862,124.487L64.079,124.487L64.079,123.924L70.249,123.924L70.249,124.487L67.466,124.487L67.466,132.491Z" style="fill-rule:nonzero;"/>
+		        <path d="M75.241,132.491L75.094,131.483L75.048,131.483C74.727,131.893 74.398,132.183 74.06,132.353C73.722,132.523 73.323,132.608 72.862,132.608C72.237,132.608 71.751,132.448 71.403,132.127C71.055,131.807 70.882,131.364 70.882,130.797C70.882,130.176 71.14,129.694 71.658,129.35C72.176,129.006 72.925,128.825 73.905,128.805L75.118,128.77L75.118,128.348C75.118,127.742 74.995,127.285 74.749,126.977C74.503,126.668 74.106,126.514 73.559,126.514C72.969,126.514 72.358,126.678 71.725,127.006L71.509,126.502C72.208,126.174 72.899,126.01 73.583,126.01C74.282,126.01 74.804,126.192 75.15,126.555C75.496,126.918 75.669,127.485 75.669,128.254L75.669,132.491L75.241,132.491ZM72.897,132.08C73.577,132.08 74.113,131.886 74.506,131.497C74.898,131.109 75.094,130.569 75.094,129.877L75.094,129.25L73.981,129.297C73.087,129.34 72.449,129.48 72.068,129.716C71.687,129.952 71.497,130.321 71.497,130.821C71.497,131.219 71.619,131.529 71.863,131.749C72.107,131.97 72.452,132.08 72.897,132.08Z" style="fill-rule:nonzero;"/>
+		        <path d="M80.098,126.625L78.598,126.625L78.598,132.491L78.018,132.491L78.018,126.625L76.835,126.625L76.835,126.285L78.018,126.069L78.018,125.576C78.018,124.795 78.162,124.222 78.449,123.857C78.736,123.491 79.206,123.309 79.858,123.309C80.21,123.309 80.561,123.362 80.913,123.467L80.778,123.971C80.466,123.873 80.155,123.825 79.846,123.825C79.393,123.825 79.072,123.958 78.883,124.226C78.693,124.493 78.598,124.928 78.598,125.53L78.598,126.121L80.098,126.121L80.098,126.625Z" style="fill-rule:nonzero;"/>
+		        <path d="M83.901,132.608C82.975,132.608 82.254,132.323 81.736,131.752C81.218,131.182 80.96,130.383 80.96,129.356C80.96,128.34 81.21,127.527 81.71,126.915C82.21,126.304 82.884,125.998 83.731,125.998C84.481,125.998 85.073,126.26 85.507,126.783C85.94,127.307 86.157,128.018 86.157,128.916L86.157,129.385L81.569,129.385C81.577,130.26 81.781,130.928 82.181,131.389C82.582,131.85 83.155,132.08 83.901,132.08C84.264,132.08 84.584,132.055 84.859,132.004C85.134,131.953 85.483,131.844 85.905,131.676L85.905,132.203C85.546,132.36 85.214,132.466 84.909,132.523C84.604,132.579 84.268,132.608 83.901,132.608ZM83.731,126.514C83.118,126.514 82.626,126.716 82.255,127.12C81.884,127.525 81.667,128.108 81.604,128.869L85.542,128.869C85.542,128.131 85.382,127.554 85.061,127.138C84.741,126.722 84.298,126.514 83.731,126.514Z" style="fill-rule:nonzero;"/>
+		        <rect x="87.915" y="123.373" width="0.58" height="9.117" style="fill-rule:nonzero;"/>
+		        <path d="M98.415,128.196C98.415,129.203 98.236,130.048 97.879,130.73C97.521,131.411 96.997,131.91 96.305,132.227L98.368,134.53L96.042,134.53L94.471,132.608L94.337,132.608C93.024,132.608 92.016,132.227 91.313,131.465C90.61,130.703 90.259,129.61 90.259,128.184C90.259,126.758 90.611,125.669 91.316,124.917C92.021,124.165 93.032,123.789 94.348,123.789C95.665,123.789 96.672,124.168 97.369,124.926C98.066,125.684 98.415,126.774 98.415,128.196ZM92.163,128.196C92.163,129.153 92.344,129.873 92.708,130.358C93.071,130.842 93.614,131.084 94.337,131.084C95.786,131.084 96.51,130.121 96.51,128.196C96.51,126.266 95.79,125.301 94.348,125.301C93.626,125.301 93.081,125.544 92.714,126.031C92.346,126.517 92.163,127.239 92.163,128.196Z" style="fill-rule:nonzero;"/>
+		        <path d="M104.69,132.491L104.45,131.653L104.356,131.653C104.165,131.957 103.893,132.193 103.542,132.359C103.19,132.525 102.79,132.608 102.341,132.608C101.571,132.608 100.991,132.402 100.6,131.99C100.21,131.577 100.014,130.985 100.014,130.211L100.014,125.94L101.801,125.94L101.801,129.766C101.801,130.239 101.885,130.593 102.053,130.829C102.221,131.066 102.489,131.184 102.856,131.184C103.356,131.184 103.717,131.017 103.94,130.683C104.163,130.349 104.274,129.795 104.274,129.022L104.274,125.94L106.061,125.94L106.061,132.491L104.69,132.491Z" style="fill-rule:nonzero;"/>
+		        <path d="M107.86,124.246C107.86,123.664 108.184,123.373 108.833,123.373C109.481,123.373 109.805,123.664 109.805,124.246C109.805,124.524 109.724,124.74 109.562,124.894C109.4,125.048 109.157,125.125 108.833,125.125C108.184,125.125 107.86,124.832 107.86,124.246ZM109.723,132.491L107.936,132.491L107.936,125.94L109.723,125.94L109.723,132.491Z" style="fill-rule:nonzero;"/>
+		        <path d="M116.157,132.491L110.983,132.491L110.983,131.436L114.018,127.305L111.165,127.305L111.165,125.94L116.051,125.94L116.051,127.1L113.098,131.125L116.157,131.125L116.157,132.491Z" style="fill-rule:nonzero;"/>
+		    </g>
+		</svg>
+</div>
+
+  </div>
+  
+
+<div data-role="content">
+
+	<label id="lbconnstatus" style="text-align: center;">Verbindungsstatus: Nicht verbunden</label>
+
+
+	<div id="msgnosessionerr">Fehler: Es wurde keine Sitzung &uuml;bermittelt!</div>
+
+	<div id="msganswertrue">
+		Ihre Antwort war leider falsch!
+	</div>
+	
+	<div id="msganswerfalse">
+		Ihre Antwort war richtig!
+	</div>
+
+	<div id="msgquizend">
+		<h2>Das Quiz wurde beendet</h2>
+		<label id="msgquizendsummary">Sie haben X von X Fragen richtig beantwortet</label>
+		
+		<a href="#quizsummarystatsdialog" class="ui-btn ui-btn-inline ui-icon-carat-r ui-btn-icon-left">Weitere Details</a>
+		
+		
+		
+		
+	</div>
+	
+
+	<div id="questionarea">
+
+		<h2 id="question">Frage</h2>
+
+		<ul data-role="listview" data-inset="true" data-filter="false">
+			<li><a href="#" onclick="answerselect('a');" id="answer_a">Antwort A</a></li>
+			<li><a href="#" onclick="answerselect('b');" id="answer_b">Antwort B</a></li>
+			<li><a href="#" onclick="answerselect('c');" id="answer_c">Antwort C</a></li>
+			<li><a href="#" onclick="answerselect('d'); " id="answer_d">Antwort	D</a></li>
+		</ul>
+
+	</div>
+
+</div>
+
+</div>
+
+	<div data-role="dialog" id="quizsummarystatsdialog">
+		  <div data-role="header">
+		    <h1>Pers&ouml;nliche Statistiken</h1>
+		  </div>
+		  <div data-role="content">
+		    <p id="quizsummarystats"></p>
+		  </div>
+		</div>
+
+
+</body>
+
+
+</html>
